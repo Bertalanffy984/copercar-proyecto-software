@@ -1,0 +1,16 @@
+# Entorno virtual
+.venv/
+
+# Cache de Python
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
