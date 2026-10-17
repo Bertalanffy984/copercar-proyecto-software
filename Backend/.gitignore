@@ -1,9 +1,12 @@
 # Entorno virtual
 .venv/
+#variables de entorno:
 
 # Cache de Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # VS Code
 .vscode/
@@ -14,3 +17,5 @@ __pycache__/
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+
+*.log
