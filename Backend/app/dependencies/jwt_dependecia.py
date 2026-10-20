@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database.conexion import get_db
 from app.utils.security import SECRET_KEY, ALGORITHM
 from app.schemas.token import DatosToken
-from app.repositories.usuario_repository import UsurioRepository
+from app.repositories.usuarios_repositori.usuario_repository import UsuarioRepository
 from app.models.models_db import Usuario
 
 esquema_oauth2 = OAuth2PasswordBearer(tokenUrl='/auth/token')
@@ -28,7 +28,7 @@ async def obtener_usuario_actual(token:Annotated[str, Depends(esquema_oauth2)], 
         datos_token=DatosToken(correo=correo)
     except InvalidTokenError:
         raise errores["error_token"]
-    usuario=UsurioRepository.get_por_correo(db=db,correo = datos_token.correo)
+    usuario=UsuarioRepository.obtener_por_correo(db=db,correo = datos_token.correo)
     if usuario is None:
         raise errores["error_credenciales"]
     return usuario

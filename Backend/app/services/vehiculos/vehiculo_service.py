@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from app.repositories.vehiculo.vehiculo_repository import VehiculoRepository
+from app.repositories.vehiculo_repositori.vehiculo_repository import VehiculoRepository
 from app.schemas.BaseDB.vehiculo import VehiculoCreate, VehiculoUpdate
 
 class VehiculoService:

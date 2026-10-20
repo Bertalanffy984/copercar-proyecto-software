@@ -7,7 +7,7 @@ class FotoVehiculoBase(ConConfigBaseModel):
   public_id: str = Field(..., max_length=255)
   es_principal: bool = False
   orden: int = Field(0, ge=0)
-
-
+class FotoVehiculoCreate(FotoVehiculoBase):
+  pass
 class FotoVehiculoResponse(FotoVehiculoBase):
   id_foto: int

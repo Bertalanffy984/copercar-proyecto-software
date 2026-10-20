@@ -13,8 +13,8 @@ class MovimientoBase(ConConfigBaseModel):
   id_vehiculo: int
   id_tipo_movimiento: int
   fecha_movimiento: date
-  valor: Decimal = Field(..., gt=0)
-  observacion: Optional[str] = Field(None, max_length=255)
+  valor: Decimal = Field(...,decimal_places=2)
+  observacion: Optional[str] = Field(None, max_length=1000)
 
 
 class MovimientoCreate(MovimientoBase):
@@ -25,7 +25,7 @@ class MovimientoUpdate(ConConfigBaseModel):
   id_tipo_movimiento: Optional[int] = None
   fecha_movimiento: Optional[date] = None
   valor: Optional[Decimal] = Field(None, gt=0)
-  observacion: Optional[str] = Field(None, max_length=255)
+  observacion: Optional[str] = Field(None, max_length=1000)
   activo: Optional[bool] = None
 
 

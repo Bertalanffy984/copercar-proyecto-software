@@ -3,7 +3,7 @@ from app.schemas.BaseDB.rol import RolResponse
 
 
 class UsuarioBase(ConConfigBaseModel):
-  id_rol: int
+  #id_rol: int
   tipo_documento: str = Field(..., max_length=4)
   numero_documento: str = Field(..., max_length=20)
   primer_nombre: str = Field(..., max_length=50)
@@ -22,7 +22,7 @@ class UsuarioCreate(UsuarioBase):
 
 
 class UsuarioUpdate(ConConfigBaseModel):
-  id_rol: Optional[int] = None
+  #id_rol: Optional[int] = None
   tipo_documento: Optional[str] = Field(None, max_length=4)
   numero_documento: Optional[str] = Field(None, max_length=20)
   primer_nombre: Optional[str] = Field(None, max_length=50)

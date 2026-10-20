@@ -1,9 +1,10 @@
 from typing import List, Annotated
-from fastapi import APIRouter,Query, Depends, status
+from fastapi import APIRouter,Query, Depends, status,UploadFile,File
 from sqlalchemy.orm import Session
 from app.database.conexion import get_db
-from app.schemas.BaseDB.vehiculo import (VehiculoCreate, VehiculoUpdate, VehiculoResponse)
+from app.schemas.BaseDB.vehiculo import (VehiculoCreate, VehiculoUpdate, VehiculoResponse,FotoVehiculoResponse)
 from app.services.vehiculos.vehiculo_service import VehiculoService
+from app.services.vehiculos.vehiculo_foto_service import FotoVehiculoService
 from app.dependencies.jwt_dependecia import obtener_usuario_activo
 
 router = APIRouter( prefix="/vehiculos", tags=["Vehículos (Inventario)"], dependencies=[Depends(obtener_usuario_activo)])
@@ -16,7 +17,7 @@ async def registrar_vehiculo(vehiculo_in: VehiculoCreate, db: Session = Depends(
 @router.get("/listar_activos", response_model=List[VehiculoResponse], status_code=status.HTTP_200_OK)
 async def listar_vehiculos_activos(
   skip:Annotated[int, Query(ge=0, description="Número de registros a omitir")] = 0,
-  limit: Annotated[int, Query(ge=1, le=20, description="Cantidad máxima de registros por página")] = 15,
+  limit: Annotated[int, Query(ge=1, le=20, description="Cantidad máxima de registros por página")] = 20,
   db: Session = Depends(get_db)):
   
   return VehiculoService.listar_vehiculos_activos(db=db, skip=skip, limit=limit)
@@ -44,3 +45,18 @@ async def eliminar_vehiculo(id_vehiculo: int, db: Session = Depends(get_db)):
   return {
       "mensaje": f"El estado ha cambiado correctamente",
   }
+
+@router.post("/subir_foto/{id_vehiculo}/", response_model=FotoVehiculoResponse, status_code=status.HTTP_201_CREATED)
+async def subir_foto_vehiculo(id_vehiculo: int,
+    db: Session = Depends(get_db),
+    archivo: UploadFile = File(...),
+    es_principal: bool = Query(False),
+    orden: int = Query(0, ge=0),
+):
+  return await FotoVehiculoService.agregar_foto_a_vehiculo(
+      db=db,
+      id_vehiculo=id_vehiculo,
+      archivo=archivo,
+      es_principal=es_principal,
+      orden=orden,
+  )
