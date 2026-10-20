@@ -10,7 +10,7 @@ import { formatCOP, formatDate } from '../utils/format'
 const monthNames=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 export default function Movements(){
  const {movements,deleteMovement}=useAppData(); const navigate=useNavigate();
- const [query,setQuery]=useState(''); const [type,setType]=useState('Todos'); const [date,setDate]=useState(''); const [month,setMonth]=useState(''); const [year,setYear]=useState(''); const [page,setPage]=useState(1); const [toDelete,setToDelete]=useState(null); const perPage=7;
+ const [query,setQuery]=useState(''); const [type,setType]=useState('Todos'); const [date,setDate]=useState(''); const [month,setMonth]=useState(''); const [year,setYear]=useState(''); const [page,setPage]=useState(1); const [toDelete,setToDelete]=useState(null); const [deleteError,setDeleteError]=useState(''); const perPage=7;
  const filtered=useMemo(()=>movements.filter(m=>{ if (m.deleted) return false;
   const d=new Date(m.date+'T00:00:00');
   return (!query||m.plate.toLowerCase().includes(query.toLowerCase())) && (type==='Todos'||m.type===type) && (!date||m.date===date) && (!month||d.getMonth()+1===Number(month)) && (!year||d.getFullYear()===Number(year));
@@ -28,12 +28,13 @@ export default function Movements(){
    <label className="field compact no-top-label"><select value={year} onChange={e=>setFilter(setYear,e.target.value)}><option value="">Año</option>{[2023,2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></label>
    <button className="btn btn-green push-right" onClick={()=>navigate('/movimientos/nuevo')}>＋ Registrar movimiento</button>
   </div>
-  <div className="responsive-table-wrap"><table className="data-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Tipo</th><th>Fecha</th><th>Valor</th><th>Usuario responsable</th><th>Acciones</th></tr></thead><tbody>{rows.map(m=><tr key={m.id}><td>{m.plate}</td><td>{m.vehicle}</td><td>{m.type}</td><td>{formatDate(m.date)}</td><td>{formatCOP(m.value)}</td><td>{m.user}</td><td className="table-actions"><EditAction onClick={()=>navigate(`/movimientos/${m.id}/editar`)}/><DeleteAction onClick={()=>setToDelete(m)}/></td></tr>)}</tbody></table></div>
+  <div className="responsive-table-wrap"><table className="data-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Tipo</th><th>Fecha</th><th>Valor</th><th>Usuario responsable</th><th>Acciones</th></tr></thead><tbody>{rows.map(m=><tr key={m.id}><td>{m.plate}</td><td>{m.vehicle}</td><td>{m.type}</td><td>{formatDate(m.date)}</td><td>{formatCOP(m.value)}</td><td>{m.user}</td><td className="table-actions"><EditAction onClick={()=>navigate(`/movimientos/${m.id}/editar`)}/><DeleteAction onClick={()=>{setDeleteError('');setToDelete(m)}}/></td></tr>)}</tbody></table></div>
   <Pagination page={page} totalPages={totalPages} onChange={setPage}/>
   <Modal open={!!toDelete} onClose={()=>setToDelete(null)}>
    <div className="warning-symbol">⚠</div><h2 className="center-title">Eliminar movimiento</h2><p className="modal-question centered">¿Está seguro de que desea eliminar este movimiento?</p>
    {toDelete&&<div className="detail-list"><span>Vehículo:</span><b>{toDelete.vehicle}</b><span>Placa:</span><b>{toDelete.plate}</b><span>Tipo de movimiento:</span><b>{toDelete.type}</b><span>Fecha:</span><b>{formatDate(toDelete.date)}</b><span>Valor:</span><b>{formatCOP(toDelete.value)}</b></div>}
-   <div className="modal-actions centered"><button className="btn btn-danger" onClick={()=>{deleteMovement(toDelete.id);setToDelete(null)}}>Sí</button><button className="btn btn-gray" onClick={()=>setToDelete(null)}>No</button></div>
+   {deleteError && <div className="form-error">{deleteError}</div>}
+   <div className="modal-actions centered"><button className="btn btn-danger" onClick={()=>{try{deleteMovement(toDelete.id);setToDelete(null)}catch(e){setDeleteError(e.message)}}}>Sí</button><button className="btn btn-gray" onClick={()=>setToDelete(null)}>No</button></div>
   </Modal>
  </section>
 }

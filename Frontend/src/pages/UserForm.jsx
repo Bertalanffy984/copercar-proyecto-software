@@ -23,12 +23,14 @@ export function UserEditor({ user = null, onSaved, onCancel }) {
     if (users.some(u => u.email.toLowerCase() === form.email.trim().toLowerCase() && u.id !== user?.id)) return setError('Ya existe un usuario con este correo electrónico.')
     if (users.some(u => u.documentNumber.trim() === form.documentNumber.trim() && u.id !== user?.id)) return setError('Ya existe un usuario con ese número de documento.')
     const payload = { ...form, documentNumber:form.documentNumber.trim(), email:form.email.trim().toLowerCase() }
+    try {
     if (editing) {
       // Sólo se envía password cuando se solicita cambiarla; la edición mantiene el rol.
       if (!payload.password) delete payload.password
       updateUser({ ...payload, role:user.role })
     } else addUser(payload)
     onSaved?.()
+    } catch (e) { setError(e.message || 'No se pudo guardar el usuario.') }
   }
   return <form className="user-form" onSubmit={submit}>
     <h1>{editing ? 'Editar usuario' : 'Agregar usuario'}</h1>

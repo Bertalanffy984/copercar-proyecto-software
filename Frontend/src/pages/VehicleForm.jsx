@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAppData } from '../context/AppDataContext'
 import PageTitle from '../components/PageTitle'
@@ -12,13 +12,15 @@ const transmissions=['Automática','Mecánica']
 
 export default function VehicleForm() {
   const { id } = useParams(); const navigate = useNavigate()
-  const { vehicles, addVehicle, updateVehicle } = useAppData()
+  const { vehicles, addVehicle, updateVehicle, loadingVehicles } = useAppData()
   const existing = useMemo(()=>vehicles.find(v=>v.id===Number(id)),[vehicles,id])
   const [form,setForm]=useState(existing ? {...existing} : empty)
+  useEffect(() => { if (existing) setForm({...existing}) }, [existing?.id])
   const [error,setError]=useState('')
+  const [saving,setSaving]=useState(false)
   const editing=!!existing
   const change=(key,val)=>setForm(f=>({...f,[key]:val}))
-  const submit=e=>{
+  const submit=async e=>{
     e.preventDefault(); setError('')
     if(!form.title||!form.plate||!form.brand||!form.line||!form.color||!form.price||!form.mileage) return setError('Complete todos los campos obligatorios.')
     if(!/^[A-Z]{3}[0-9]{3}$/i.test(form.plate.trim())) return setError('La placa debe tener 3 letras seguidas de 3 números (ejemplo: ABC123).')
@@ -27,14 +29,20 @@ export default function VehicleForm() {
     const duplicate=vehicles.some(v=>v.plate.toLowerCase()===form.plate.trim().toLowerCase() && v.id!==form.id)
     if(duplicate) return setError('Ya existe un vehículo registrado con esta placa.')
     const payload={...form,plate:form.plate.trim().toUpperCase(),price:Number(form.price),mileage:Number(form.mileage),owners:Number(form.owners)}
-    editing?updateVehicle(payload):addVehicle(payload)
-    navigate('/vehiculos')
+    setSaving(true)
+    try {
+      if (editing) await updateVehicle(payload)
+      else await addVehicle(payload)
+      navigate('/vehiculos')
+    } catch (e) { setError(e.message || 'No se pudo guardar el vehículo.') }
+    finally { setSaving(false) }
   }
   const onFiles=async e=>{
     const files=[...e.target.files].slice(0,8)
     const read=f=>new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(f)})
     const data=await Promise.all(files.map(read)); change('photos',[...(form.photos||[]),...data])
   }
+  if(id && !existing && loadingVehicles) return null
   if(id && !existing) return <section className="page-section"><h2>Vehículo no encontrado</h2><button className="btn btn-orange" onClick={()=>navigate('/vehiculos')}>Volver al inventario</button></section>
   return (
     <section className="page-section form-page">
@@ -58,10 +66,10 @@ export default function VehicleForm() {
           <label className="field"><span>Ciudad o municipio de Matrícula*</span><SearchableSelect value={form.city} options={citiesByDepartment[form.department]||[]} onChange={city=>change('city',city)} placeholder="Buscar o escribir municipio" ariaLabel="Ciudad o municipio de matrícula" allowCustom disabled={!form.department}/><small className="field-hint">Escribe para filtrar; si no aparece en las sugerencias, puedes ingresar el municipio manualmente.</small></label>
         </div>
         <div className="photo-section"><label className="btn btn-orange upload-label">+Agregar foto<input type="file" accept="image/*" multiple onChange={onFiles}/></label><div className="photo-grid">{(form.photos||[]).map((p,i)=><div className="photo-item" key={i}><img src={p}/><button type="button" onClick={()=>change('photos',form.photos.filter((_,j)=>j!==i))}>×</button></div>)}</div></div>
-        <div className="doc-section"><h3>SOAT</h3><div className="doc-grid"><label className="field"><span>Número</span><input value={form.soatNumber} onChange={e=>change('soatNumber',e.target.value)}/></label><label className="field date-field"><span>Vigencia hasta</span><input type="date" value={form.soatExpiry} onChange={e=>change('soatExpiry',e.target.value)}/></label></div></div>
-        <div className="doc-section"><h3>Revisión Tecnomecánica</h3><div className="doc-grid"><label className="field"><span>Número</span><input value={form.rtmNumber} onChange={e=>change('rtmNumber',e.target.value)}/></label><label className="field date-field"><span>Vigencia hasta</span><input type="date" value={form.rtmExpiry} onChange={e=>change('rtmExpiry',e.target.value)}/></label></div></div>
+        <div className="doc-section"><h3>SOAT</h3><div className="doc-grid"><label className="field date-field" style={{gridColumn:'1 / -1'}}><span>Vigencia hasta</span><input type="date" value={form.soatExpiry} onChange={e=>change('soatExpiry',e.target.value)}/></label></div></div>
+        <div className="doc-section"><h3>Revisión Tecnomecánica</h3><div className="doc-grid"><label className="field date-field" style={{gridColumn:'1 / -1'}}><span>Vigencia hasta</span><input type="date" value={form.rtmExpiry} onChange={e=>change('rtmExpiry',e.target.value)}/></label></div></div>
         {error&&<div className="form-error form-wide">{error}</div>}
-        <div className="form-actions"><button className="btn btn-orange">Guardar</button><button className="btn btn-orange secondary-orange" type="button" onClick={()=>navigate('/vehiculos')}>Cancelar</button></div>
+        <div className="form-actions"><button className="btn btn-orange" disabled={saving}>Guardar</button><button className="btn btn-orange secondary-orange" type="button" onClick={()=>navigate('/vehiculos')}>Cancelar</button></div>
       </form>
     </section>
   )
