@@ -1,21 +1,54 @@
-# Entorno virtual
-.venv/
-#variables de entorno:
-
-# Cache de Python
+# Python bytecode and caches
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.hypothesis/
 
-# VS Code
-.vscode/
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
 
-# JetBrains
+# Packaging and build output
+build/
+dist/
+site/
+*.egg-info/
+
+# Test and coverage output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local databases and application data
+*.sqlite
+*.sqlite3
+*.db
+/instance/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Editor settings
 .idea/
+.vscode/
+*.swp
+*.swo
 
-# Archivos del sistema
+# Operating-system files
 .DS_Store
 Thumbs.db
-
-*.log
+Desktop.ini

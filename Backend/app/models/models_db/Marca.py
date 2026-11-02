@@ -4,5 +4,6 @@ class Marca(Base):
 
   id_marca = Column(Integer, primary_key=True, autoincrement=True)
   nombre = Column(String(50), unique=True, nullable=False)
+  activo = Column(Boolean, default=True, nullable=False)
 
   lineas = relationship("Linea", back_populates="marca")
