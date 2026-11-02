@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
@@ -6,6 +6,8 @@ import Modal from '../components/Modal'
 import PageTitle from '../components/PageTitle'
 import { useAppData } from '../context/AppDataContext'
 import { formatCOP, formatDate } from '../utils/format'
+import { backendMode } from '../services/api'
+import { reporteMensualBackend } from '../services/backend'
 
 function BarChart({ data }){
   const max=Math.max(...data.flatMap(d=>[d.income,d.expense]),1)
@@ -16,14 +18,40 @@ export default function Reports(){
  const { movements, vehicles } = useAppData()
  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
  const [year,setYear]=useState('2026'); const [month,setMonth]=useState('Todos'); const [open,setOpen]=useState(false); const [format,setFormat]=useState('PDF')
+ const [remoteMonths,setRemoteMonths]=useState(null)
+ const [reportError,setReportError]=useState('')
+ const [loadingReport,setLoadingReport]=useState(false)
+ useEffect(()=>{
+  if(!backendMode)return
+  let active=true
+  setRemoteMonths(null);setReportError('');setLoadingReport(true)
+  Promise.all(Array.from({length:12},(_,index)=>reporteMensualBackend(Number(year),index+1)))
+   .then(result=>{if(active)setRemoteMonths(result)})
+   .catch(error=>{if(active)setReportError(error.message||'No se pudieron consultar los reportes.')})
+   .finally(()=>{if(active)setLoadingReport(false)})
+  return ()=>{active=false}
+ },[year])
  const yearMovements=useMemo(()=>movements.filter(m=>!m.deleted && m.date?.startsWith(`${year}-`)),[movements,year])
  const selectedMovements=useMemo(()=>yearMovements.filter(m=>month==='Todos'||Number(m.date.slice(5,7))===months.indexOf(month)+1),[yearMovements,month])
- const metrics=useMemo(()=>{const income=selectedMovements.filter(m=>m.type==='Venta').reduce((a,m)=>a+Number(m.value),0);const expense=selectedMovements.filter(m=>m.type==='Compra').reduce((a,m)=>a+Number(m.value),0);return {income,expense,gain:income-expense,count:selectedMovements.length}},[selectedMovements])
+ const localMetrics=useMemo(()=>{const income=selectedMovements.filter(m=>m.type==='Venta').reduce((a,m)=>a+Number(m.value),0);const expense=selectedMovements.filter(m=>m.type==='Compra').reduce((a,m)=>a+Number(m.value),0);return {income,expense,gain:income-expense,count:selectedMovements.length}},[selectedMovements])
  const asRow = m => ({plate:m.plate || vehicles.find(v=>v.id===m.vehicleId)?.plate || '—',vehicle:m.vehicle || vehicles.find(v=>v.id===m.vehicleId)?.title || 'Vehículo',date:m.date,value:Number(m.value)})
- const soldVehicles=selectedMovements.filter(m=>m.type==='Venta').map(asRow)
- const boughtVehicles=selectedMovements.filter(m=>m.type==='Compra').map(asRow)
- const monthlyReport=months.map((name,i)=>{const records=yearMovements.filter(m=>Number(m.date.slice(5,7))===i+1);return {month:name,income:records.filter(m=>m.type==='Venta').reduce((a,m)=>a+Number(m.value),0),expense:records.filter(m=>m.type==='Compra').reduce((a,m)=>a+Number(m.value),0)}})
+ const localSoldVehicles=selectedMovements.filter(m=>m.type==='Venta').map(asRow)
+ const localBoughtVehicles=selectedMovements.filter(m=>m.type==='Compra').map(asRow)
+ const localMonthlyReport=months.map((name,i)=>{const records=yearMovements.filter(m=>Number(m.date.slice(5,7))===i+1);return {month:name,income:records.filter(m=>m.type==='Venta').reduce((a,m)=>a+Number(m.value),0),expense:records.filter(m=>m.type==='Compra').reduce((a,m)=>a+Number(m.value),0)}})
+ const activeMonths=remoteMonths ? remoteMonths.filter((_,index)=>month==='Todos'||index===months.indexOf(month)) : []
+ const metrics=backendMode ? {
+  income:activeMonths.reduce((sum,report)=>sum+Number(report.ingresos_totales||0),0),
+  expense:activeMonths.reduce((sum,report)=>sum+Number(report.egresos_totales||0),0),
+  gain:activeMonths.reduce((sum,report)=>sum+Number(report.ganancia_neta||0),0),
+  count:activeMonths.reduce((sum,report)=>sum+Number(report.cantidad_movimientos||0),0),
+ } : localMetrics
+ const fromReportVehicle=v=>({plate:v.placa,vehicle:v.vehiculo,date:v.fecha,value:Number(v.valor)})
+ const soldVehicles=backendMode ? activeMonths.flatMap(r=>(r.vehiculos_vendidos||[]).map(fromReportVehicle)) : localSoldVehicles
+ const boughtVehicles=backendMode ? activeMonths.flatMap(r=>(r.vehiculos_comprados||[]).map(fromReportVehicle)) : localBoughtVehicles
+ const monthlyReport=backendMode ? months.map((name,index)=>({month:name,income:Number(remoteMonths?.[index]?.ingresos_totales||0),expense:Number(remoteMonths?.[index]?.egresos_totales||0)})) : localMonthlyReport
  const exportFile=()=>{
+  if(backendMode && (!remoteMonths||loadingReport||reportError)) return
+
   if(format==='Excel'){
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{Periodo:`${month} ${year}`,Ingresos:metrics.income,Egresos:metrics.expense,Ganancia:metrics.gain,Movimientos:metrics.count}]),'Resumen')
@@ -36,9 +64,10 @@ export default function Reports(){
   setOpen(false)
  }
  return <section className="page-section"><PageTitle upper>REPORTES</PageTitle><div className="module-heading-row"><h1>Reportes</h1></div>
-  <div className="report-filter-row"><label className="field compact"><span>Año</span><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from(new Set([2026,...movements.map(m=>Number(m.date?.slice(0,4))).filter(Boolean)])).sort((a,b)=>b-a).map(y=><option key={y}>{y}</option>)}</select></label><label className="field compact"><span>Mes</span><select value={month} onChange={e=>setMonth(e.target.value)}>{['Todos',...months].map(m=><option key={m}>{m}</option>)}</select></label><button className="btn btn-green push-right" onClick={()=>setOpen(true)}>Exportar reporte</button></div>
+  <div className="report-filter-row"><label className="field compact"><span>Año</span><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from(new Set([2026,...movements.map(m=>Number(m.date?.slice(0,4))).filter(Boolean)])).sort((a,b)=>b-a).map(y=><option key={y}>{y}</option>)}</select></label><label className="field compact"><span>Mes</span><select value={month} onChange={e=>setMonth(e.target.value)}>{['Todos',...months].map(m=><option key={m}>{m}</option>)}</select></label><button className="btn btn-green push-right" disabled={backendMode && (!remoteMonths || loadingReport || !!reportError)} onClick={()=>setOpen(true)}>Exportar reporte</button></div>
+  {loadingReport&&<p>Consultando reportes de MySQL...</p>}{reportError&&<div className="form-error">{reportError}</div>}
   <div className="metric-grid"><div className="metric-card"><span>Ingresos (COP)</span><b className="green">{formatCOP(metrics.income)}</b></div><div className="metric-card"><span>Egresos (COP)</span><b className="red">{formatCOP(metrics.expense)}</b></div><div className="metric-card"><span>Ganancia (COP)</span><b className="blue">{formatCOP(metrics.gain)}</b></div><div className="metric-card"><span>Cantidad de movimientos</span><b>{metrics.count}</b></div></div>
-  <BarChart data={monthlyReport}/><p className="report-explainer">Datos de demostración calculados a partir de movimientos activos. Ganancia = ingresos − egresos (saldo simple, no utilidad contable).</p>
+  <BarChart data={monthlyReport}/><p className="report-explainer">{backendMode ? 'Datos reales de movimientos activos, consultados a FastAPI. Ganancia = ingresos − egresos (saldo simple, no utilidad contable).' : 'Datos de demostración calculados a partir de movimientos activos. Ganancia = ingresos − egresos (saldo simple, no utilidad contable).'}</p>
   <h3 className="report-table-title">Vehículos vendidos</h3><div className="responsive-table-wrap"><table className="data-table compact-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>{soldVehicles.map((v,i)=><tr key={`${v.plate}-${i}`}><td>{v.plate}</td><td>{v.vehicle}</td><td>{formatDate(v.date)}</td><td>{formatCOP(v.value)}</td></tr>)}{!soldVehicles.length&&<tr><td colSpan="4">Sin ventas en el período seleccionado.</td></tr>}</tbody></table></div>
   <h3 className="report-table-title">Vehículos comprados</h3><div className="responsive-table-wrap"><table className="data-table compact-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>{boughtVehicles.map((v,i)=><tr key={`${v.plate}-${i}`}><td>{v.plate}</td><td>{v.vehicle}</td><td>{formatDate(v.date)}</td><td>{formatCOP(v.value)}</td></tr>)}{!boughtVehicles.length&&<tr><td colSpan="4">Sin compras en el período seleccionado.</td></tr>}</tbody></table></div>
   <Modal open={open} title="Exportar reporte" onClose={()=>setOpen(false)}><p>Periodo: {month} de {year}</p><p>Seleccione el formato</p><label className="radio-line"><input type="radio" checked={format==='PDF'} onChange={()=>setFormat('PDF')}/> PDF</label><label className="radio-line"><input type="radio" checked={format==='Excel'} onChange={()=>setFormat('Excel')}/> Excel</label><div className="modal-actions"><button className="btn btn-green" onClick={exportFile}>Exportar</button><button className="btn btn-gray" onClick={()=>setOpen(false)}>Cancelar</button></div></Modal>

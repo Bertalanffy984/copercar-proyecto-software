@@ -53,8 +53,13 @@ export function AuthProvider({ children }) {
     setCurrentUser(null)
   }
 
-  const updateSessionUser = (user) => {
-    if (backendMode) throw new Error('El backend actual no ofrece un endpoint para editar el perfil.')
+  const updateSessionUser = async (user) => {
+    if (backendMode) {
+      const updated = await getBackendUser()
+      setCurrentUser(updated)
+      sessionStorage.setItem(backendSessionUserKey, JSON.stringify(updated))
+      return updated
+    }
     const { password: ignoredPassword, ...safeUser } = user
     setCurrentUser(safeUser)
     sessionStorage.setItem(sessionKey, JSON.stringify(safeUser))

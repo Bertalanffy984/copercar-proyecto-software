@@ -175,3 +175,29 @@ a{color:inherit}
  .searchable-options{max-height:180px}
  .modal-body .user-form-grid{grid-template-columns:1fr}
 }
+
+/* COPERCAR-VALIDACION-VISUAL-V1: solo afecta campos con un error comprobado. */
+.field[data-invalid="true"] > input,
+.field[data-invalid="true"] > select,
+.field[data-invalid="true"] > textarea,
+.field[data-invalid="true"] .searchable-input-row input,
+.field[data-invalid="true"] .password-field input {
+  border: 2px solid #c62828 !important;
+  background-color: #fff9f9;
+}
+.field[data-invalid="true"] > input:focus,
+.field[data-invalid="true"] > select:focus,
+.field[data-invalid="true"] > textarea:focus,
+.field[data-invalid="true"] .searchable-input-row input:focus,
+.field[data-invalid="true"] .password-field input:focus {
+  outline: 2px solid #c62828;
+  outline-offset: 1px;
+}
+.field .field-validation-message {
+  display:block;
+  font-size:11px;
+  color:#9b1c1c;
+  line-height:1.4;
+  font-weight:600;
+  margin-top:3px;
+}

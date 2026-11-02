@@ -23,9 +23,9 @@ export default function App(){
       <Route path="/vehiculos" element={<Vehicles/>}/>
       <Route path="/vehiculos/nuevo" element={<VehicleForm/>}/>
       <Route path="/vehiculos/:id/editar" element={<VehicleForm/>}/>
-      <Route path="/movimientos" element={<Movements/>}/>
-      <Route path="/movimientos/nuevo" element={<MovementForm/>}/>
-      <Route path="/movimientos/:id/editar" element={<MovementForm/>}/>
+      <Route path="/movimientos" element={<Guard roles={['admin']}><Movements/></Guard>}/>
+      <Route path="/movimientos/nuevo" element={<Guard roles={['admin']}><MovementForm/></Guard>}/>
+      <Route path="/movimientos/:id/editar" element={<Guard roles={['admin']}><MovementForm/></Guard>}/>
       <Route path="/mis-datos" element={<MyData/>}/>
       <Route path="/reportes" element={<Guard roles={['admin']}><Reports/></Guard>}/>
       <Route path="/usuarios" element={<Guard roles={['admin']}><Users/></Guard>}/>

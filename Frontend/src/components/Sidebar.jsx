@@ -5,7 +5,7 @@ const items = [
   { key: 'users', to: '/usuarios', icon: '/assets/ui/icon-users.png', label: 'Usuarios', roles: ['admin'] },
   { key: 'profile', to: '/mis-datos', icon: '/assets/ui/icon-users.png', label: 'Mis datos', roles: ['asesor'] },
   { key: 'vehicles', to: '/vehiculos', icon: '/assets/ui/icon-vehicles.png', label: 'Vehículos', roles: ['admin','asesor'] },
-  { key: 'movements', to: '/movimientos', icon: '/assets/ui/icon-movements.png', label: 'Movimientos', roles: ['admin','asesor'] },
+  { key: 'movements', to: '/movimientos', icon: '/assets/ui/icon-movements.png', label: 'Movimientos', roles: ['admin'] },
   { key: 'reports', to: '/reportes', icon: '/assets/ui/icon-reports.png', label: 'Reportes', roles: ['admin'] },
 ]
 
