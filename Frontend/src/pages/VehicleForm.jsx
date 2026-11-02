@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAppData } from '../context/AppDataContext'
 import PageTitle from '../components/PageTitle'
 import SearchableSelect from '../components/SearchableSelect'
-import { backendMode } from '../services/api'
+import { backendMode, apiRequest } from '../services/api'
 import { establecerCatalogoReal } from '../services/backendCatalogs'
+import { cargarCatalogoVehiculos } from '../services/catalogoVehiculos'
 import { validateVehicle, messageForErrors, serverErrors, shouldShowServerError } from '../utils/formValidation'
 
 const empty = { cityId:null, title:'',status:'Disponible',brand:'',line:'',color:'',year:new Date().getFullYear(),plate:'',mileage:'',price:'',owners:1,engine:'',fuel:'',transmission:'',department:'',city:'',photos:[],soatNumber:'',soatExpiry:'',rtmNumber:'',rtmExpiry:'' }
@@ -15,7 +16,7 @@ const transmissions=['Automática','Mecánica']
 
 export default function VehicleForm() {
   const { id } = useParams(); const navigate = useNavigate()
-  const { vehicles, addVehicle, updateVehicle, loadingVehicles } = useAppData()
+  const { vehicles, addVehicle, updateVehicle, loadingVehicles, refreshVehicles } = useAppData()
   const existing = useMemo(()=>vehicles.find(v=>v.id===Number(id)),[vehicles,id])
   const [form,setForm]=useState(existing ? {...existing} : empty)
   useEffect(() => { if (existing) setForm({...existing}) }, [existing?.id])
@@ -27,10 +28,9 @@ export default function VehicleForm() {
   useEffect(() => {
     if (!backendMode) return
     let alive = true
-    fetch('/catalogos/copercar.json', {cache:'no-store'})
-      .then(response => { if (!response.ok) throw new Error('No se encontró el catálogo exportado de MySQL.') ; return response.json() })
+    cargarCatalogoVehiculos()
       .then(data => {establecerCatalogoReal(data); if (alive) {setCatalogo(data);setCatalogError('')} })
-      .catch(() => { if (alive) setCatalogError('No se pudieron cargar los catálogos reales de MySQL. Ejecuta EXPORTAR_CATALOGOS_COPERCAR.ps1 antes de guardar vehículos.') })
+      .catch(() => { if (alive) setCatalogError('No se pudieron cargar las opciones. Actualiza la página e inténtalo nuevamente.') })
     return () => {alive = false}
   }, [])
   const editing=!!existing
@@ -54,8 +54,8 @@ export default function VehicleForm() {
   const submit=async e=>{
     e.preventDefault();setError('');setFieldErrors({})
     const errors = validateVehicle(form, vehicles)
-    if (backendMode && !catalogo) errors.brand = catalogError || 'Primero exporta los catálogos reales de MySQL.'
-    if (backendMode && catalogo && !matchingCity) errors.city = 'Selecciona un municipio válido del catálogo de MySQL.'
+    if (backendMode && !catalogo) errors.brand = catalogError || 'No se pudieron cargar las opciones. Inténtalo de nuevo.'
+    if (backendMode && catalogo && !matchingCity) errors.city = 'Selecciona un municipio válido.'
     if (backendMode && catalogo && !lineOptions.some(l=>l.name === form.line)) errors.line = 'Selecciona una línea existente para la marca elegida.'
     if (Object.keys(errors).length) {markErrors(errors);return}
     const payload = {...form,plate:form.plate.trim().toUpperCase(),price:Number(form.price),mileage:Number(form.mileage),owners:Number(form.owners)}
@@ -69,6 +69,17 @@ export default function VehicleForm() {
       if (Object.keys(mapped).length) {markErrors(mapped)}
       else setError(shouldShowServerError(e,mapped))
     } finally {setSaving(false)}
+  }
+  const removePhoto=async (p,i)=>{
+    if (backendMode && editing && typeof p === 'string' && !p.startsWith('data:')) {
+      const record=existing?.photoRecords?.find(x=>x.url===p)
+      if(!record?.id){setError('No se pudo identificar la fotografía seleccionada.');return}
+      if(!window.confirm('¿Eliminar esta fotografía del vehículo?'))return
+      try {await apiRequest(`/vehiculos/eliminar_foto/${record.id}`,{method:'DELETE'});change('photos',form.photos.filter((_,j)=>j!==i));await refreshVehicles();setError('')}
+      catch {setError('No fue posible eliminar la fotografía. Inténtalo nuevamente.')}
+      return
+    }
+    change('photos',form.photos.filter((_,j)=>j!==i))
   }
   const onFiles=async e=>{
     const files=[...e.target.files].slice(0,8)
@@ -85,7 +96,7 @@ export default function VehicleForm() {
           <label className="field" data-field-key="title" data-invalid={Boolean(fieldErrors.title)}><span>Nombre o título*</span><input value={form.title} onChange={e=>change('title',e.target.value)}/>{fieldErrors.title && <small className="field-validation-message">{fieldErrors.title}</small>}</label>
           <label className="field" data-field-key="status" data-invalid={Boolean(fieldErrors.status)}><span>Estado*</span><select value={form.status} onChange={e=>change('status',e.target.value)}><option>Disponible</option><option>Ingresando</option><option>No disponible</option><option>Vendido</option><option>Separado</option></select>{fieldErrors.status && <small className="field-validation-message">{fieldErrors.status}</small>}</label>
           <label className="field" data-field-key="brand" data-invalid={Boolean(fieldErrors.brand)}><span>Marca*</span><select value={form.brand} onChange={e=>{setForm(f=>({...f,brand:e.target.value,line:''}));clearError('brand');clearError('line')}}><option value="">Marca</option>{(backendMode ? brandOptions.map(x=>x.name) : brands).map(x=><option key={x}>{x}</option>)}</select>{fieldErrors.brand && <small className="field-validation-message">{fieldErrors.brand}</small>}</label>
-          <label className="field" data-field-key="line" data-invalid={Boolean(fieldErrors.line)}><span>Línea*</span>{backendMode ? <select value={form.line} disabled={!catalogo || !form.brand} onChange={e=>change('line',e.target.value)}><option value="">{!catalogo ? 'Carga el catálogo de MySQL' : !form.brand ? 'Selecciona una marca primero' : lineOptions.length ? 'Selecciona una línea' : 'Esta marca no tiene líneas registradas'}</option>{lineOptions.map(x=><option key={x.id} value={x.name}>{x.name}</option>)}</select> : <><input list="vehicle-lines" value={form.line} onChange={e=>change('line',e.target.value)}/><datalist id="vehicle-lines">{(linesByBrand[form.brand]||[]).map(x=><option key={x} value={x}/>)}</datalist></>}{fieldErrors.line && <small className="field-validation-message">{fieldErrors.line}</small>}</label>
+          <label className="field" data-field-key="line" data-invalid={Boolean(fieldErrors.line)}><span>Línea*</span>{backendMode ? <select value={form.line} disabled={!catalogo || !form.brand} onChange={e=>change('line',e.target.value)}><option value="">{!catalogo ? 'No hay líneas disponibles' : !form.brand ? 'Selecciona una marca primero' : lineOptions.length ? 'Selecciona una línea' : 'Esta marca no tiene líneas registradas'}</option>{lineOptions.map(x=><option key={x.id} value={x.name}>{x.name}</option>)}</select> : <><input list="vehicle-lines" value={form.line} onChange={e=>change('line',e.target.value)}/><datalist id="vehicle-lines">{(linesByBrand[form.brand]||[]).map(x=><option key={x} value={x}/>)}</datalist></>}{fieldErrors.line && <small className="field-validation-message">{fieldErrors.line}</small>}</label>
           <label className="field" data-field-key="color" data-invalid={Boolean(fieldErrors.color)}><span>Color*</span><input value={form.color} onChange={e=>change('color',e.target.value)}/>{fieldErrors.color && <small className="field-validation-message">{fieldErrors.color}</small>}</label>
           <label className="field" data-field-key="year" data-invalid={Boolean(fieldErrors.year)}><span>Modelo (Año)*</span><input type="number" min="1950" max="2035" value={form.year} onChange={e=>change('year',e.target.value)}/>{fieldErrors.year && <small className="field-validation-message">{fieldErrors.year}</small>}</label>
           <label className="field" data-field-key="plate" data-invalid={Boolean(fieldErrors.plate)}><span>Placa*</span><input value={form.plate} onChange={e=>change('plate',e.target.value)}/>{fieldErrors.plate && <small className="field-validation-message">{fieldErrors.plate}</small>}</label>
@@ -96,10 +107,10 @@ export default function VehicleForm() {
           <label className="field" data-field-key="fuel" data-invalid={Boolean(fieldErrors.fuel)}><span>Combustible*</span><select value={form.fuel} onChange={e=>change('fuel',e.target.value)}><option value="">Combustible</option>{fuels.map(x=><option key={x}>{x}</option>)}</select>{fieldErrors.fuel && <small className="field-validation-message">{fieldErrors.fuel}</small>}</label>
           <label className="field" data-field-key="transmission" data-invalid={Boolean(fieldErrors.transmission)}><span>Transmisión*</span><select value={form.transmission} onChange={e=>change('transmission',e.target.value)}><option value="">Transmisión</option>{transmissions.map(x=><option key={x}>{x}</option>)}</select>{fieldErrors.transmission && <small className="field-validation-message">{fieldErrors.transmission}</small>}</label>
           {!backendMode && <label className="field" data-field-key="department" data-invalid={Boolean(fieldErrors.department)}><span>Departamento de Matrícula*</span><SearchableSelect value={form.department} options={departments} onChange={department=>{setForm(f=>({...f,department,cityId:null,city:''}));clearError('department');clearError('city')}} placeholder="Buscar departamento" ariaLabel="Departamento de matrícula" />{fieldErrors.department && <small className="field-validation-message">{fieldErrors.department}</small>}</label>}
-          <label className="field" data-field-key="city" data-invalid={Boolean(fieldErrors.city)}><span>Ciudad o municipio de Matrícula*</span>{backendMode ? <SearchableSelect value={matchingCity ? String(matchingCity.id) : ''} options={cityOptions} onChange={value=>{selectCity(value);clearError('city')}} placeholder={catalogo ? 'Buscar municipio o departamento' : 'Primero carga el catálogo de MySQL'} ariaLabel="Ciudad o municipio de matrícula" disabled={!catalogo}/> : <SearchableSelect value={form.city} options={citiesByDepartment[form.department]||[]} onChange={city=>{setForm(f=>({...f,city,cityId:null}));clearError('city')}} placeholder="Buscar o escribir municipio" ariaLabel="Ciudad o municipio de matrícula" allowCustom />}<small className="field-hint">{backendMode ? 'Selecciona solo la ciudad. El departamento se obtiene automáticamente de MySQL.' : 'En modo de demostración se utilizan sugerencias locales.'}</small>{fieldErrors.city && <small className="field-validation-message">{fieldErrors.city}</small>}</label>
+          <label className="field" data-field-key="city" data-invalid={Boolean(fieldErrors.city)}><span>Ciudad o municipio de Matrícula*</span>{backendMode ? <SearchableSelect value={matchingCity ? String(matchingCity.id) : ''} options={cityOptions} onChange={value=>{selectCity(value);clearError('city')}} placeholder={catalogo ? 'Buscar municipio o departamento' : 'No hay municipios disponibles'} ariaLabel="Ciudad o municipio de matrícula" disabled={!catalogo}/> : <SearchableSelect value={form.city} options={citiesByDepartment[form.department]||[]} onChange={city=>{setForm(f=>({...f,city,cityId:null}));clearError('city')}} placeholder="Buscar o escribir municipio" ariaLabel="Ciudad o municipio de matrícula" allowCustom />}<small className="field-hint">{backendMode ? 'Selecciona solo la ciudad. El departamento se selecciona automáticamente.' : 'Selecciona una ciudad.'}</small>{fieldErrors.city && <small className="field-validation-message">{fieldErrors.city}</small>}</label>
 
         </div>
-        <div className="photo-section"><label className="btn btn-orange upload-label">+Agregar foto<input type="file" accept="image/*" multiple onChange={onFiles}/></label><div className="photo-grid">{(form.photos||[]).map((p,i)=><div className="photo-item" key={i}><img src={p}/><button type="button" onClick={()=>change('photos',form.photos.filter((_,j)=>j!==i))}>×</button></div>)}</div></div>
+        <div className="photo-section"><label className="btn btn-orange upload-label">+Agregar foto<input type="file" accept="image/*" multiple onChange={onFiles}/></label><div className="photo-grid">{(form.photos||[]).map((p,i)=><div className="photo-item" key={i}><img src={p}/><button type="button" onClick={()=>removePhoto(p,i)}>×</button></div>)}</div></div>
         <div className="doc-section"><h3>SOAT</h3><div className="doc-grid"><label className="field date-field" data-field-key="soatExpiry" data-invalid={Boolean(fieldErrors.soatExpiry)} style={{gridColumn:'1 / -1'}}><span>Vigencia hasta</span><input type="date" value={form.soatExpiry} onChange={e=>change('soatExpiry',e.target.value)}/>{fieldErrors.soatExpiry && <small className="field-validation-message">{fieldErrors.soatExpiry}</small>}</label></div></div>
         <div className="doc-section"><h3>Revisión Tecnomecánica</h3><div className="doc-grid"><label className="field date-field" data-field-key="rtmExpiry" data-invalid={Boolean(fieldErrors.rtmExpiry)} style={{gridColumn:'1 / -1'}}><span>Vigencia hasta</span><input type="date" value={form.rtmExpiry} onChange={e=>change('rtmExpiry',e.target.value)}/>{fieldErrors.rtmExpiry && <small className="field-validation-message">{fieldErrors.rtmExpiry}</small>}</label></div></div>
         {catalogError && backendMode && <div className="form-error form-wide" role="alert">{catalogError}</div>}{error&&<div className="form-error form-wide" role="alert">{error}</div>}

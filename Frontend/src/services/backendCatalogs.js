@@ -29,7 +29,10 @@ const byNormalized = (record, value) => normalizarCatalogo(record) === normaliza
 const required = (value, label) => { if (!value) throw new Error(label); return value }
 
 export function fromBackendVehicle(v) {
-  const brand = v.linea?.marca?.nombre || ''
+  // VehiculoResponse incluye id_linea, pero LineaResponse no incluye marca anidada.
+  const lineaCatalogo = catalogoReal?.lineas?.find(l => Number(l.id) === Number(v.id_linea))
+  const marcaCatalogo = catalogoReal?.marcas?.find(m => Number(m.id) === Number(lineaCatalogo?.brandId))
+  const brand = v.linea?.marca?.nombre || marcaCatalogo?.name || ''
   const department = normalizarCatalogo(v.ciudad?.departamento?.nombre) === 'caqueta' ? 'CAQUETÁ' : (v.ciudad?.departamento?.nombre?.toUpperCase() || '')
   return {
     id: v.id_vehiculo, title: v.titulo || '', status:v.estado?.nombre || '',
@@ -39,6 +42,7 @@ export function fromBackendVehicle(v) {
     fuel:({ Diesel:'Diésel', Electrico:'Eléctrico', Hibrido:'Híbrida', Gasolina:'Gasolina' })[v.combustible?.nombre] || v.combustible?.nombre || '',
     transmission:v.transmision?.nombre === 'Manual' ? 'Mecánica' : (v.transmision?.nombre === 'Automatica' ? 'Automática' : v.transmision?.nombre || ''),
     department, city:v.ciudad?.nombre || '', cityId:v.id_ciudad,
+    photoRecords:(v.fotos||[]).map(f=>({id:f.id_foto,url:f.ruta,principal:Boolean(f.es_principal)})),
     photos:[...(v.fotos||[])].sort((a,b)=>Number(b.es_principal)-Number(a.es_principal) || a.orden-b.orden).map(f=>f.ruta),
     soatNumber:'', soatExpiry:v.fecha_vencimiento_soat || '',
     rtmNumber:'', rtmExpiry:v.fecha_vencimiento_rtm || '',
@@ -51,7 +55,7 @@ let catalogoReal = null
 export function establecerCatalogoReal(datos) {
   if (!datos || !Array.isArray(datos.marcas) || !Array.isArray(datos.lineas) ||
       !Array.isArray(datos.ciudades) || datos.ciudades.length < 1000) {
-    throw new Error('El catálogo de MySQL no tiene la estructura esperada. No se aplicaron identificadores.')
+    throw new Error('No se pudieron cargar las opciones disponibles.')
   }
   catalogoReal = datos
 }
@@ -59,19 +63,19 @@ export const obtenerCatalogoReal = () => catalogoReal
 
 export function toBackendVehicle(form, original = null) {
   if (form.soatNumber?.trim() || form.rtmNumber?.trim()) {
-    throw new Error('Los números de SOAT y RTM todavía no tienen campos ni endpoints en FastAPI. No se guardó el vehículo; deje esos números vacíos hasta que backend los implemente.')
+    throw new Error('Por ahora no es posible guardar los números de SOAT o RTM. Déjalos vacíos para continuar.')
   }
-  if (!catalogoReal) throw new Error('Primero exporta los catálogos de MySQL. No se guardó el vehículo.')
+  if (!catalogoReal) throw new Error('No se pudieron cargar las opciones del formulario. Inténtalo nuevamente.')
   const marca = catalogoReal.marcas.find(m => normalizarCatalogo(m.name) === normalizarCatalogo(form.brand))
   const line = marca && catalogoReal.lineas.find(l => Number(l.brandId) === Number(marca.id) && normalizarCatalogo(l.name) === normalizarCatalogo(form.line))
-  required(line, 'La línea seleccionada no pertenece a la marca en el catálogo de MySQL. Elige una línea de la lista.')
+  required(line, 'Selecciona una línea válida para la marca elegida.')
   const city = catalogoReal.ciudades.find(c => Number(c.id) === Number(form.cityId))
-  required(city, 'Selecciona una ciudad del catálogo de MySQL. No se guardó el vehículo.')
+  required(city, 'Selecciona una ciudad válida.')
   const findCatalogId = (items, value, label, aliases = {}) => {
     const normalized = normalizarCatalogo(value)
     const target = aliases[normalized] || normalized
     const found = items.find(item => normalizarCatalogo(item.name) === target)
-    return required(found?.id, `${label} no reconocido en el catálogo real de MySQL.`)
+    return required(found?.id, `${label} no reconocido. Selecciona una opción válida.`)
   }
   const idEstado = findCatalogId(catalogoReal.estados, form.status, 'Estado')
   const idCombustible = findCatalogId(catalogoReal.combustibles, form.fuel, 'Combustible', {

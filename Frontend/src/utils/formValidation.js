@@ -62,8 +62,8 @@ export const validateMovement = (f, vehicles = [], editing = false, previous = n
   const e = {}
   if (!filled(f.vehicleId)) e.vehicleId='Selecciona un vehículo registrado.'
   else if (!vehicles.some(v=>Number(v.id)===Number(f.vehicleId))) e.vehicleId='El vehículo elegido no está disponible en el inventario activo.'
-  if (backendMode && editing && Number(f.vehicleId)!==Number(previous?.vehicleId)) e.vehicleId='La API no permite cambiar el vehículo de un movimiento existente.'
-  if (!filled(f.type) || !['Compra','Venta'].includes(f.type)) e.type='Selecciona Compra o Venta.'
+  if (backendMode && editing && Number(f.vehicleId)!==Number(previous?.vehicleId)) e.vehicleId='No es posible cambiar el vehículo de un movimiento ya registrado.'
+  if (!filled(f.type) || !['Compra','Venta','Impuesto','Mantenimiento','Reparación','Seguro','RTM','Otro gasto','Otro ingreso'].includes(f.type)) e.type='Selecciona un tipo de movimiento válido.'
   if (!filled(f.date) || !isRealDate(f.date)) e.date='Selecciona una fecha válida para el movimiento.'
   if (!filled(f.value) || !Number.isFinite(number(f.value)) || number(f.value)<=0) e.value='Introduce un valor de operación mayor que cero.'
   else if (!/^\d+(?:\.\d{1,2})?$/.test(String(f.value).trim())) e.value='Utiliza un número con máximo dos decimales, sin separadores de miles.'
@@ -106,7 +106,8 @@ export const shouldShowServerError = (error, mapped) => {
   if (error?.status === 401) return 'Tu sesión no es válida o ha caducado. Vuelve a iniciar sesión.'
   if (error?.status === 403) return 'Tu cuenta no tiene permiso para realizar esta operación. No se guardaron los cambios.'
   if (error?.status === 404) return 'El registro ya no está disponible en el servidor. Actualiza el listado.'
-  if (error?.status >= 500) return 'El servidor no pudo completar la operación. Los datos no se confirmaron; revisa la conexión o consulta al responsable del backend.'
+  if (error?.status >= 500) return 'No fue posible completar la operación. Los cambios no se guardaron. Inténtalo nuevamente.'
   if (Object.keys(mapped).length) return messageForErrors(mapped)
+  if (/\b(?:backend|endpoint|fastapi|mysql|cloudinary|api|localhost|traceback|sql)\b/i.test(String(error?.message||''))) return 'No fue posible completar la operación. Inténtalo nuevamente.'
   return error?.message || 'No fue posible completar la operación.'
 }

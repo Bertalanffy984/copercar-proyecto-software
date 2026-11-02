@@ -201,3 +201,31 @@ a{color:inherit}
   font-weight:600;
   margin-top:3px;
 }
+/* Gestión de marcas y líneas: respeta tipografía y botones existentes */
+.brand-manager-group { margin: 12px 0; padding: 12px; border: 1px solid #dedede; border-radius: 8px; }
+.brand-manager-line { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; }
+.brand-manager-line strong,.brand-manager-line>span:first-child { flex:1; min-width:120px; }
+.brand-manager-child { border-top:1px solid #eee; padding-left:20px; }
+.brand-manager-line .btn { padding:7px 10px; }
+
+/* Gestión de marcas y líneas: secciones de activos e inactivos y ventanas de edición. */
+.brands-lines-page .brand-manager-group { margin: 8px 0; }
+.brands-lines-page .brand-manager-line > .estado-activo,
+.brands-lines-page .brand-manager-line > .estado-inactivo { flex: 0 0 auto; min-width: 75px; text-align: center; }
+.catalog-notice { font-size: 13px; color: #665b51; margin: 0 0 12px; line-height: 1.5; }
+.catalog-parent-brand { color: #75685e; font-weight: 400; }
+.catalog-modal-form { display: flex; flex-direction: column; gap: 12px; }
+.catalog-modal-form .field { display: flex; flex-direction: column; gap: 6px; }
+.catalog-modal-form .field input { width: 100%; min-height: 39px; }
+@media (max-width: 620px) {
+ .brands-lines-page .brand-manager-line { gap: 8px; }
+ .brands-lines-page .brand-manager-child { padding-left: 8px; }
+}
+
+/* Pestañas de administración de marcas y líneas */
+.catalog-navigation{display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid #dfc1a8;margin:16px 0 22px;padding-bottom:9px}
+.catalog-navigation-btn{background:#f5f5f5;border:1px solid #c9c9c9;border-radius:7px;padding:11px 18px;min-height:42px;color:#333;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s}
+.catalog-navigation-btn:hover{background:#f9ebe0}
+.catalog-navigation-btn.selected{background:var(--orange);border-color:var(--orange);color:#fff}
+.catalog-navigation-btn:focus-visible{outline:3px solid #315da8;outline-offset:2px}
+@media(max-width:520px){.catalog-navigation{flex-direction:column}.catalog-navigation-btn{width:100%;text-align:center}}

@@ -4,7 +4,7 @@ import { useAppData } from '../context/AppDataContext'
 import PasswordField from '../components/PasswordField'
 import {validateUser, messageForErrors, serverErrors, shouldShowServerError} from '../utils/formValidation'
 
-const empty = { documentType:'Cédula', documentNumber:'', firstName:'', secondName:'', lastName:'', secondLastName:'', email:'', phone:'', birthDate:'', gender:'Masculino', password:'', address:'', role:'asesor' }
+const empty = { documentType:'Cédula', documentNumber:'', firstName:'', secondName:'', lastName:'', secondLastName:'', email:'', phone:'', birthDate:'', gender:'Masculino', password:'', address:'', role:'asesor', active:true }
 
 // Reutilizable en la página "Agregar usuario" y en la ventana modal "Editar usuario".
 export function UserEditor({ user = null, onSaved, onCancel }) {
@@ -26,7 +26,7 @@ export function UserEditor({ user = null, onSaved, onCancel }) {
     try {
       if (editing) {
         if (!payload.password) delete payload.password
-        await updateUser({...payload,role:user.role})
+        await updateUser(payload)
       } else await addUser(payload)
       onSaved?.()
     } catch (e) {
@@ -50,6 +50,8 @@ export function UserEditor({ user = null, onSaved, onCancel }) {
       <label className="field" data-field-key="password" data-invalid={Boolean(fieldErrors.password)}><span>{editing ? 'Nueva contraseña (opcional)' : 'Contraseña *'}</span><PasswordField value={form.password} onChange={e=>change('password',e.target.value)} placeholder={editing ? 'Dejar vacía para conservar' : 'Digite la contraseña'} required={false}/>{editing && <small className="field-hint">Déjala vacía si no deseas cambiarla.</small>}{fieldErrors.password && <small className="field-validation-message">{fieldErrors.password}</small>}</label>
       <label className="field" data-field-key="secondLastName" data-invalid={Boolean(fieldErrors.secondLastName)}><span>Segundo apellido (opcional)</span><input value={form.secondLastName || ''} onChange={e=>change('secondLastName', e.target.value)} />{fieldErrors.secondLastName && <small className="field-validation-message">{fieldErrors.secondLastName}</small>}</label>
       <label className="field" data-field-key="address" data-invalid={Boolean(fieldErrors.address)}><span>Dirección *</span><input value={form.address} onChange={e=>change('address', e.target.value)} />{fieldErrors.address && <small className="field-validation-message">{fieldErrors.address}</small>}</label>
+      <label className="field" data-field-key="role"><span>Tipo de usuario *</span><select value={form.role || 'asesor'} onChange={e=>change('role',e.target.value)}><option value="asesor">Asesor</option><option value="admin">Administrador</option></select></label>
+      <label className="field" data-field-key="active"><span>Estado *</span><select value={String(form.active !== false)} onChange={e=>change('active',e.target.value==='true')}><option value="true">Activo</option><option value="false">Inactivo</option></select></label>
     </div>
     {error && <div className="form-error form-wide" role="alert">{error}</div>}
     <div className="form-actions right"><button type="submit" className="btn btn-green" disabled={saving}>Guardar</button><button type="button" className="btn btn-light" onClick={onCancel}>Cancelar</button></div>

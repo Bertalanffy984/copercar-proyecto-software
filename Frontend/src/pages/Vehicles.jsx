@@ -7,12 +7,14 @@ import StatusBadge from '../components/StatusBadge'
 import { DeleteAction, EditAction } from '../components/ActionIcons'
 import { formatCOP } from '../utils/format'
 import { backendMode } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import { buscarVehiculoBackend, filtrarVehiculoBackend } from '../services/backend'
 import { fromBackendVehicle, estadoBackendIds } from '../services/backendCatalogs'
 
 export default function Vehicles() {
   const { vehicles, movements, deleteVehicle, loadingVehicles, vehicleError } = useAppData()
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('Todos')
   const [toDelete, setToDelete] = useState(null)
@@ -65,7 +67,7 @@ export default function Vehicles() {
       <div className="toolbar vehicle-toolbar">
         <label className="searchbox"><span>⌕</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar por placa" /></label>
         <label className="field compact"><span>Estado*</span><select value={status} onChange={e=>setStatus(e.target.value)}><option>Todos</option><option>Disponible</option><option>Ingresando</option><option>No disponible</option><option>Vendido</option><option>Separado</option></select></label>
-        <button className="btn btn-green push-right" onClick={()=>navigate('/vehiculos/nuevo')}>Agregar Vehículo</button>
+        <div className="push-right" style={{display:'flex',gap:8,flexWrap:'wrap'}}>{currentUser?.role === 'admin' && <button type="button" className="btn btn-orange secondary-orange" onClick={()=>navigate('/vehiculos/marcas-lineas')}>Administrar marcas y líneas</button>}<button className="btn btn-green" onClick={()=>navigate('/vehiculos/nuevo')}>Agregar Vehículo</button></div>
       </div>
 
       {(vehicleError || searchError) && <div className="form-error">{vehicleError || searchError}</div>}

@@ -16,7 +16,7 @@ export async function apiRequest(path, options = {}) {
   if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
   let response
   try { response = await fetch(`${API_URL}${path}`, { ...requestOptions, headers }) }
-  catch { throw new Error('No se pudo conectar con FastAPI. Compruebe que el backend esta ejecutandose en el puerto 8001.') }
+  catch { throw new Error('No fue posible establecer la conexión. Inténtalo nuevamente.') }
   const raw = await response.text()
   let result = null
   try { result = raw ? JSON.parse(raw) : null } catch { result = raw }
@@ -27,7 +27,7 @@ export async function apiRequest(path, options = {}) {
       titulo:'title', id_estado:'status',id_linea:'line',id_ciudad:'city',placa:'plate',color:'color',
       modelo:'year',kilometraje:'mileage',precio:'price',cantidad_duenos:'owners',cilindraje:'engine',
       id_combustible:'fuel',id_transmision:'transmission',fecha_vencimiento_soat:'soatExpiry',fecha_vencimiento_rtm:'rtmExpiry',
-      tipo_documento:'documentType',numero_documento:'documentNumber',primer_nombre:'firstName',segundo_nombre:'secondName',
+      id_rol:'role',tipo_documento:'documentType',numero_documento:'documentNumber',primer_nombre:'firstName',segundo_nombre:'secondName',
       primer_apellido:'lastName',segundo_apellido:'secondLastName',correo:'email',celular:'phone',
       fecha_nacimiento:'birthDate',genero:'gender',contrasena:'password',direccion:'address',
       id_vehiculo:'vehicleId',id_tipo_movimiento:'type',fecha_movimiento:'date',valor:'value',observacion:'observation',archivo:'photos',
@@ -43,8 +43,8 @@ export async function apiRequest(path, options = {}) {
     const fallback = response.status === 401 ? 'Correo o contraseña incorrectos, o sesión vencida.'
       : response.status === 403 ? 'No tienes permiso para esta operación.'
       : response.status === 404 ? 'No se encontró el recurso solicitado.'
-      : response.status >= 500 ? 'FastAPI no pudo completar la operación. Revisa la terminal del backend.'
-      : `Error HTTP ${response.status}`
+      : response.status >= 500 ? 'No se pudo completar la operación. Inténtalo nuevamente.'
+      : `No se pudo completar la solicitud.`
     const error = new Error(readable || fallback)
     error.status = response.status
     error.fieldErrors = fieldErrors

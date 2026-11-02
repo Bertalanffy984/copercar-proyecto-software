@@ -15,7 +15,7 @@ function BarChart({ data }){
 }
 
 export default function Reports(){
- const { movements, vehicles } = useAppData()
+ const { movements, vehicles, loadingVehicles, vehicleError } = useAppData()
  const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
  const [year,setYear]=useState('2026'); const [month,setMonth]=useState('Todos'); const [open,setOpen]=useState(false); const [format,setFormat]=useState('PDF')
  const [remoteMonths,setRemoteMonths]=useState(null)
@@ -49,27 +49,69 @@ export default function Reports(){
  const soldVehicles=backendMode ? activeMonths.flatMap(r=>(r.vehiculos_vendidos||[]).map(fromReportVehicle)) : localSoldVehicles
  const boughtVehicles=backendMode ? activeMonths.flatMap(r=>(r.vehiculos_comprados||[]).map(fromReportVehicle)) : localBoughtVehicles
  const monthlyReport=backendMode ? months.map((name,index)=>({month:name,income:Number(remoteMonths?.[index]?.ingresos_totales||0),expense:Number(remoteMonths?.[index]?.egresos_totales||0)})) : localMonthlyReport
+ // Existencias al día: no aplicar el filtro por año/mes, que solo corresponde a movimientos.
+ // Se utilizan los vehículos activos ya consultados para el módulo de inventario.
+ const availableVehicles=useMemo(()=>vehicles
+  .filter(v=>String(v.status||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()==='disponible')
+  .map(v=>({plate:v.plate||'—',vehicle:v.title||'Vehículo',brandLine:[v.brand,v.line].filter(Boolean).join(' / ')||'—',year:v.year||'—',price:Number(v.price)||0}))
+  .sort((a,b)=>a.plate.localeCompare(b.plate,'es')),[vehicles])
+ const loadingInventory=backendMode && loadingVehicles
+ const inventoryUnavailable=backendMode && !!vehicleError
+ const availableTableRows=availableVehicles.map(v=>[v.plate,v.vehicle,v.brandLine,String(v.year),formatCOP(v.price)])
  const exportFile=()=>{
-  if(backendMode && (!remoteMonths||loadingReport||reportError)) return
+  if ((backendMode && (!remoteMonths || loadingReport || reportError)) || loadingInventory || inventoryUnavailable) return
 
   if(format==='Excel'){
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{Periodo:`${month} ${year}`,Ingresos:metrics.income,Egresos:metrics.expense,Ganancia:metrics.gain,Movimientos:metrics.count}]),'Resumen')
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(soldVehicles),'Vendidos'); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(boughtVehicles),'Comprados'); XLSX.writeFile(wb,`COPERCAR_reporte_${year}_${month}.xlsx`)
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{Periodo:`${month} ${year}`,Ingresos:metrics.income,Egresos:metrics.expense,Ganancia:metrics.gain,Movimientos:metrics.count,'Vehículos disponibles hoy':availableVehicles.length}]),'Resumen')
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(soldVehicles),'Vendidos')
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(boughtVehicles),'Comprados')
+    const disponiblesHoja=XLSX.utils.aoa_to_sheet([
+      ['Placa','Vehículo','Marca y línea','Modelo','Precio de venta (COP)'],
+      ...availableVehicles.map(v=>[v.plate,v.vehicle,v.brandLine,v.year,v.price]),
+    ])
+    XLSX.utils.book_append_sheet(wb,disponiblesHoja,'Disponibles')
+    XLSX.writeFile(wb,`COPERCAR_reporte_${year}_${month}.xlsx`)
   }else{
     const doc=new jsPDF(); doc.setFontSize(18); doc.text('COPERCAR - Reporte',14,18); doc.setFontSize(11); doc.text(`Periodo: ${month} de ${year}`,14,28); doc.text(`Ingresos: ${formatCOP(metrics.income)}`,14,38); doc.text(`Egresos: ${formatCOP(metrics.expense)}`,14,45); doc.text(`Ganancia: ${formatCOP(metrics.gain)}`,14,52); doc.text(`Cantidad de movimientos: ${metrics.count}`,14,59);
     autoTable(doc,{startY:68,head:[['Tipo','Placa','Vehículo','Fecha','Valor']],body:[...soldVehicles.map(v=>['Venta',v.plate,v.vehicle,formatDate(v.date),formatCOP(v.value)]),...boughtVehicles.map(v=>['Compra',v.plate,v.vehicle,formatDate(v.date),formatCOP(v.value)])],styles:{fontSize:8},headStyles:{fillColor:[255,110,6]}})
+    let nextY=(doc.lastAutoTable?.finalY || 68)+14
+    if(nextY>260){doc.addPage();nextY=22}
+    doc.setFontSize(12)
+    doc.text('Vehículos disponibles - inventario actual',14,nextY)
+    autoTable(doc,{
+      startY:nextY+5,
+      head:[['Placa','Vehículo','Marca / línea','Modelo','Precio de venta']],
+      body:availableTableRows.length ? availableTableRows : [['Sin vehículos disponibles','—','—','—','—']],
+      styles:{fontSize:7,cellPadding:2},
+      headStyles:{fillColor:[255,110,6]},
+      columnStyles:{1:{cellWidth:52},2:{cellWidth:42}},
+    })
     doc.save(`COPERCAR_reporte_${year}_${month}.pdf`)
   }
   setOpen(false)
  }
  return <section className="page-section"><PageTitle upper>REPORTES</PageTitle><div className="module-heading-row"><h1>Reportes</h1></div>
-  <div className="report-filter-row"><label className="field compact"><span>Año</span><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from(new Set([2026,...movements.map(m=>Number(m.date?.slice(0,4))).filter(Boolean)])).sort((a,b)=>b-a).map(y=><option key={y}>{y}</option>)}</select></label><label className="field compact"><span>Mes</span><select value={month} onChange={e=>setMonth(e.target.value)}>{['Todos',...months].map(m=><option key={m}>{m}</option>)}</select></label><button className="btn btn-green push-right" disabled={backendMode && (!remoteMonths || loadingReport || !!reportError)} onClick={()=>setOpen(true)}>Exportar reporte</button></div>
-  {loadingReport&&<p>Consultando reportes de MySQL...</p>}{reportError&&<div className="form-error">{reportError}</div>}
+  <div className="report-filter-row"><label className="field compact"><span>Año</span><select value={year} onChange={e=>setYear(e.target.value)}>{Array.from(new Set([2026,...movements.map(m=>Number(m.date?.slice(0,4))).filter(Boolean)])).sort((a,b)=>b-a).map(y=><option key={y}>{y}</option>)}</select></label><label className="field compact"><span>Mes</span><select value={month} onChange={e=>setMonth(e.target.value)}>{['Todos',...months].map(m=><option key={m}>{m}</option>)}</select></label><button className="btn btn-green push-right" disabled={(backendMode && (!remoteMonths || loadingReport || !!reportError)) || loadingInventory || inventoryUnavailable} onClick={()=>setOpen(true)}>Exportar reporte</button></div>
+  {loadingReport&&<p>Consultando reportes...</p>}{reportError&&<div className="form-error">No se pudo consultar el resumen de movimientos. Inténtalo nuevamente.</div>}
   <div className="metric-grid"><div className="metric-card"><span>Ingresos (COP)</span><b className="green">{formatCOP(metrics.income)}</b></div><div className="metric-card"><span>Egresos (COP)</span><b className="red">{formatCOP(metrics.expense)}</b></div><div className="metric-card"><span>Ganancia (COP)</span><b className="blue">{formatCOP(metrics.gain)}</b></div><div className="metric-card"><span>Cantidad de movimientos</span><b>{metrics.count}</b></div></div>
-  <BarChart data={monthlyReport}/><p className="report-explainer">{backendMode ? 'Datos reales de movimientos activos, consultados a FastAPI. Ganancia = ingresos − egresos (saldo simple, no utilidad contable).' : 'Datos de demostración calculados a partir de movimientos activos. Ganancia = ingresos − egresos (saldo simple, no utilidad contable).'}</p>
+  <BarChart data={monthlyReport}/><p className="report-explainer">Ganancia = ingresos − egresos (saldo simple, no utilidad contable).</p>
   <h3 className="report-table-title">Vehículos vendidos</h3><div className="responsive-table-wrap"><table className="data-table compact-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>{soldVehicles.map((v,i)=><tr key={`${v.plate}-${i}`}><td>{v.plate}</td><td>{v.vehicle}</td><td>{formatDate(v.date)}</td><td>{formatCOP(v.value)}</td></tr>)}{!soldVehicles.length&&<tr><td colSpan="4">Sin ventas en el período seleccionado.</td></tr>}</tbody></table></div>
   <h3 className="report-table-title">Vehículos comprados</h3><div className="responsive-table-wrap"><table className="data-table compact-table"><thead><tr><th>Placa</th><th>Vehículo</th><th>Fecha</th><th>Valor</th></tr></thead><tbody>{boughtVehicles.map((v,i)=><tr key={`${v.plate}-${i}`}><td>{v.plate}</td><td>{v.vehicle}</td><td>{formatDate(v.date)}</td><td>{formatCOP(v.value)}</td></tr>)}{!boughtVehicles.length&&<tr><td colSpan="4">Sin compras en el período seleccionado.</td></tr>}</tbody></table></div>
+  <h3 className="report-table-title">Vehículos disponibles</h3>
+  <p className="report-explainer">Inventario disponible actualmente. Esta sección no cambia al seleccionar un año o mes, porque muestra existencias de hoy, no movimientos históricos.</p>
+  {loadingInventory && <p>Cargando vehículos disponibles...</p>}
+  {inventoryUnavailable && <div className="form-error">No fue posible consultar los vehículos disponibles. Actualiza la página para intentarlo nuevamente.</div>}
+  {!loadingInventory && !inventoryUnavailable && <>
+    <p className="report-explainer">Total de vehículos disponibles: <strong>{availableVehicles.length}</strong></p>
+    <div className="responsive-table-wrap"><table className="data-table compact-table">
+      <thead><tr><th>Placa</th><th>Vehículo</th><th>Marca y línea</th><th>Modelo</th><th>Precio de venta</th></tr></thead>
+      <tbody>
+        {availableVehicles.map((v,i)=><tr key={`${v.plate}-${i}`}><td>{v.plate}</td><td>{v.vehicle}</td><td>{v.brandLine}</td><td>{v.year}</td><td>{formatCOP(v.price)}</td></tr>)}
+        {!availableVehicles.length && <tr><td colSpan="5">No hay vehículos disponibles actualmente.</td></tr>}
+      </tbody>
+    </table></div>
+  </>}
   <Modal open={open} title="Exportar reporte" onClose={()=>setOpen(false)}><p>Periodo: {month} de {year}</p><p>Seleccione el formato</p><label className="radio-line"><input type="radio" checked={format==='PDF'} onChange={()=>setFormat('PDF')}/> PDF</label><label className="radio-line"><input type="radio" checked={format==='Excel'} onChange={()=>setFormat('Excel')}/> Excel</label><div className="modal-actions"><button className="btn btn-green" onClick={exportFile}>Exportar</button><button className="btn btn-gray" onClick={()=>setOpen(false)}>Cancelar</button></div></Modal>
  </section>
 }

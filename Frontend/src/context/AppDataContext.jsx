@@ -9,7 +9,15 @@ import {
   listarMovimientosBackend, crearMovimientoBackend, actualizarMovimientoBackend, eliminarMovimientoBackend,
   subirFotoVehiculoBackend,
 } from '../services/backend'
-import { fromBackendVehicle, toBackendVehicle } from '../services/backendCatalogs'
+import { fromBackendVehicle, toBackendVehicle, establecerCatalogoReal } from '../services/backendCatalogs'
+import { cargarCatalogoVehiculos } from '../services/catalogoVehiculos'
+
+async function obtenerInventarioActual() {
+  const [catalogo, inventario] = await Promise.allSettled([cargarCatalogoVehiculos(), listarVehiculosBackend()])
+  if (inventario.status === 'rejected') throw inventario.reason
+  if (catalogo.status === 'fulfilled') establecerCatalogoReal(catalogo.value)
+  return inventario.value.filter(v => v.activo).map(fromBackendVehicle)
+}
 
 const AppDataContext = createContext(null)
 const load = (key, fallback) => {
@@ -54,8 +62,8 @@ export function AppDataProvider({ children }) {
     if (!backendMode) return
     setLoadingVehicles(true); setVehicleError('')
     try {
-      const result = await listarVehiculosBackend()
-      setVehicles(result.filter(x => x.activo).map(fromBackendVehicle))
+      const result = await obtenerInventarioActual()
+      setVehicles(result)
     } catch (e) { setVehicleError(e.message); throw e }
     finally { setLoadingVehicles(false) }
   }
@@ -64,7 +72,7 @@ export function AppDataProvider({ children }) {
     if (!currentUser) { setVehicles([]); setVehicleError(''); return }
     let active = true
     setLoadingVehicles(true); setVehicleError('')
-    listarVehiculosBackend().then(result => { if (active) setVehicles(result.filter(x=>x.activo).map(fromBackendVehicle)) })
+    obtenerInventarioActual().then(result => { if (active) setVehicles(result) })
       .catch(e => { if (active) setVehicleError(e.message) })
       .finally(() => { if (active) setLoadingVehicles(false) })
     return () => { active = false }
@@ -76,7 +84,7 @@ export function AppDataProvider({ children }) {
     try {
       const result = await listarUsuariosBackend()
       // Gestión de usuarios del backend solo devuelve asesores; las bajas se ocultan del listado operativo.
-      setUsers(result.filter(u => u.active))
+      setUsers(result)
     } catch (e) { setUsersError(e.message); throw e }
     finally { setLoadingUsers(false) }
   }
@@ -85,7 +93,7 @@ export function AppDataProvider({ children }) {
     if (currentUser?.role !== 'admin') { setUsers([]); setUsersError(''); return }
     let active = true
     setLoadingUsers(true); setUsersError('')
-    listarUsuariosBackend().then(result => { if (active) setUsers(result.filter(u => u.active)) })
+    listarUsuariosBackend().then(result => { if (active) setUsers(result) })
       .catch(e => { if (active) setUsersError(e.message) })
       .finally(() => { if (active) setLoadingUsers(false) })
     return () => { active = false }
@@ -129,7 +137,7 @@ export function AppDataProvider({ children }) {
       const previous = vehicles.find(x => x.id === v.id)
       if (!previous) throw new Error('Vehículo no encontrado en el inventario actual.')
       const removed = (previous.photos || []).filter(p => !(v.photos || []).includes(p))
-      if (removed.length) throw new Error('El backend no dispone de una ruta para eliminar fotografías anteriores. Consérvelas; sí puede agregar nuevas.')
+      if (removed.length) throw new Error('Para eliminar una fotografía guardada utiliza la opción Quitar que aparece debajo de la imagen.')
       const saved = await actualizarVehiculoBackend(v.id, toBackendVehicle(v, previous))
       try { await uploadNewPhotos(v.id, v, previous.photos || []) }
       finally { await refreshVehicles() }
@@ -153,13 +161,72 @@ export function AppDataProvider({ children }) {
       return v
     }))
   }
+  // El backend de Juan admite actualizar solamente id_estado; 4 = Vendido.
+  // Se aplica SOLO al guardar un movimiento de VENTA, nunca al crear un vehículo.
+  const actualizarEstadoPorVenta = async vehicleId => {
+    const id = Number(vehicleId)
+    if (!Number.isInteger(id) || id <= 0) throw new Error('No se identificó el vehículo de la venta.')
+    const vehiculo = vehicles.find(v => Number(v.id) === id)
+    if (String(vehiculo?.status || '').trim().toLowerCase() === 'vendido') return
+    await actualizarVehiculoBackend(id, { id_estado: 4 })
+  }
+  const actualizarListasTrasVenta = async () => {
+    // Recuperar ambos listados aunque alguno de los dos falle al recargarse.
+    await Promise.allSettled([refreshVehicles(), refreshMovements()])
+  }
   const addMovement = async m => {
-    if (backendMode) { const saved=await crearMovimientoBackend(m); await refreshMovements(); return saved }
+    if (backendMode) {
+      const saved = await crearMovimientoBackend(m)
+      if (m.type === 'Venta') {
+        try {
+          await actualizarEstadoPorVenta(m.vehicleId)
+        } catch (error) {
+          // Compensación: no dejar una VENTA activa si falla el cambio de estado.
+          // DELETE /movimientos/eliminar desactiva el movimiento en MySQL.
+          let anulada = false
+          if (saved?.id_movimiento) {
+            try { await eliminarMovimientoBackend(saved.id_movimiento); anulada = true }
+            catch { /* no ocultar que la operación quedó parcialmente guardada */ }
+          }
+          await actualizarListasTrasVenta()
+          throw new Error(anulada
+            ? 'No se completó la venta porque no se pudo cambiar el vehículo a Vendido. El movimiento se desactivó. Revisa el inventario antes de intentarlo nuevamente.'
+            : 'ATENCIÓN: la VENTA quedó registrada, pero no se confirmó el cambio del vehículo a Vendido. No registres otra venta; revisa el inventario y comunica este caso al administrador.')
+        }
+        await actualizarListasTrasVenta()
+      } else {
+        await refreshMovements()
+      }
+      return saved
+    }
     const next=[...movements,{...m,deleted:false,id:Math.max(0,...movements.map(x=>x.id))+1}]
     setMovements(next);syncSales(next);return m
   }
   const updateMovement = async m => {
-    if (backendMode) { const saved=await actualizarMovimientoBackend(m.id,m);await refreshMovements();return saved }
+    if (backendMode) {
+      const original = movements.find(x => Number(x.id) === Number(m.id))
+      const saved = await actualizarMovimientoBackend(m.id, m)
+      if (m.type === 'Venta') {
+        try {
+          await actualizarEstadoPorVenta(m.vehicleId)
+        } catch (error) {
+          // Si el movimiento cambió de otro tipo a VENTA, intentar restaurarlo.
+          let restaurado = false
+          if (original && original.type !== 'Venta') {
+            try { await actualizarMovimientoBackend(m.id, original); restaurado = true }
+            catch { /* informar del posible guardado parcial */ }
+          }
+          await actualizarListasTrasVenta()
+          throw new Error(restaurado
+            ? 'No se completó el cambio a VENTA porque no se pudo actualizar el estado del vehículo. Se recuperó el tipo anterior del movimiento.'
+            : 'El movimiento se guardó, pero no se confirmó que el vehículo esté Vendido. No repitas el cambio; revisa ambos registros con el administrador.')
+        }
+        await actualizarListasTrasVenta()
+      } else {
+        await refreshMovements()
+      }
+      return saved
+    }
     const next=movements.map(x=>x.id===m.id?m:x);setMovements(next);syncSales(next);return m
   }
   const deleteMovement = async id => {
@@ -167,11 +234,18 @@ export function AppDataProvider({ children }) {
     const next=movements.map(x=>x.id===id?{...x,deleted:true}:x);setMovements(next);syncSales(next);return true
   }
   const addUser = async u => {
-    if (backendMode) { const saved=await crearUsuarioBackend(u);await refreshUsers();return saved }
+    if (backendMode) { try {return await crearUsuarioBackend(u)} finally {await refreshUsers()} }
     setUsers(prev=>[...prev,{...u,id:Math.max(0,...prev.map(x=>x.id))+1,role:u.role||'asesor'}]);return u
   }
   const updateUser = async u => {
-    if (backendMode) { const saved=await actualizarUsuarioBackend(u.id,u);await refreshUsers();return saved }
+    if (backendMode) {
+      const original = users.find(x => Number(x.id) === Number(u.id))
+      if (!original) throw new Error('No se encontró el usuario solicitado. Actualiza la lista e inténtalo nuevamente.')
+      if (u.role !== original.role) throw new Error('El cambio de rol al editar aún no está habilitado en el servicio. No se guardaron cambios.')
+      const saved = await actualizarUsuarioBackend(u.id,u)
+      await refreshUsers()
+      return saved
+    }
     setUsers(prev=>prev.map(x=>x.id===u.id?{...x,...u,password:u.password||x.password}:x));return u
   }
   const deleteUser = async id => {

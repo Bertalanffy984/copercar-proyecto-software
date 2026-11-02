@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import Login from './pages/Login'
 import Vehicles from './pages/Vehicles'
+import BrandsLines from './pages/BrandsLines'
 import VehicleForm from './pages/VehicleForm'
 import Movements from './pages/Movements'
 import MovementForm from './pages/MovementForm'
@@ -21,6 +22,7 @@ export default function App(){
     <Route element={<Guard><AppLayout/></Guard>}>
       <Route index element={<Navigate to="/vehiculos" replace/>}/>
       <Route path="/vehiculos" element={<Vehicles/>}/>
+      <Route path="/vehiculos/marcas-lineas" element={<Guard roles={['admin']}><BrandsLines/></Guard>}/>
       <Route path="/vehiculos/nuevo" element={<VehicleForm/>}/>
       <Route path="/vehiculos/:id/editar" element={<VehicleForm/>}/>
       <Route path="/movimientos" element={<Guard roles={['admin']}><Movements/></Guard>}/>
