@@ -5,7 +5,24 @@ from app.routers.usuarios_routers import usuarios_router
 from app.routers.movimientos_routers import movimientos_router
 from app.routers.reportes_routers import reportes_router
 from app.routers.marca_linea_routers import marca_linea_router
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configuración de losorígenes permitidos
+
 app = FastAPI(title="COPERCAR", version="1.1")
+
+origins = [
+     "https://santiagomun277.github.io",
+     "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"], 
+)
 
 #router para la autenticacion
 app.include_router(jwt_auth_router.router)
