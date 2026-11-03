@@ -41,7 +41,8 @@ htmlcov/
 *.log
 *.tmp
 *.bak
-
+#
+Frontend/
 # Editor settings
 .idea/
 .vscode/
